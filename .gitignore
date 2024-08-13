@@ -1,0 +1,5 @@
+# Goland project files
+.idea/
+
+# Binaries
+main
