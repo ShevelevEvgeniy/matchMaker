@@ -3,3 +3,6 @@
 
 # Binaries
 main
+
+# config
+.env
