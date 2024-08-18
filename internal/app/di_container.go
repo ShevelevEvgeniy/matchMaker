@@ -5,23 +5,31 @@ import (
 	"os"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"matchMaker/config"
+	"matchMaker/internal/console"
 	"matchMaker/internal/http_server/api/v1/handlers"
-	dbConn "matchMaker/internal/postgres/db_connection"
-	"matchMaker/internal/postgres/repository"
+	playerSelection "matchMaker/internal/http_server/player_selection"
 	"matchMaker/internal/service"
+	dbConn "matchMaker/internal/storage/postgres/db_connection"
+	"matchMaker/internal/storage/postgres/repository"
+	"matchMaker/internal/storage/redis/redis_client"
 )
 
 type DIContainer struct {
-	log       *zap.Logger
-	cfg       *config.Config
-	validator *validator.Validate
-	db        *pgxpool.Pool
-	repo      service.Repository
-	serv      handlers.Service
-	handler   *handlers.MatchMakerHandler
+	log                    *zap.Logger
+	cfg                    *config.Config
+	validator              *validator.Validate
+	db                     *pgxpool.Pool
+	cache                  *redis.Client
+	repo                   service.Repository
+	serv                   handlers.Service
+	handler                *handlers.MatchMakerHandler
+	playerSelection        playerSelection.PlayerSelectionInterface
+	playerSelectionService playerSelection.Service
+	logGroups              playerSelection.LogGroups
 }
 
 func NewDiContainer(log *zap.Logger, cfg *config.Config) *DIContainer {
@@ -46,6 +54,21 @@ func (di *DIContainer) DB(ctx context.Context) *pgxpool.Pool {
 	return di.db
 }
 
+func (di *DIContainer) Redis(ctx context.Context) *redis.Client {
+	if di.cache == nil {
+		cache, err := redis_client.Connect(ctx, di.cfg.Redis)
+		if err != nil {
+			di.log.Fatal("failed to connect to redis", zap.Error(err))
+			os.Exit(1)
+		}
+
+		di.log.Info("connected to redis", zap.String("redis", di.cfg.Redis.Host))
+		di.cache = cache
+	}
+
+	return di.cache
+}
+
 func (di *DIContainer) Validator() *validator.Validate {
 	if di.validator == nil {
 		di.validator = validator.New()
@@ -63,7 +86,7 @@ func (di *DIContainer) Repository(ctx context.Context) service.Repository {
 
 func (di *DIContainer) Service(ctx context.Context) handlers.Service {
 	if di.serv == nil {
-		di.serv = service.NewService(di.Repository(ctx))
+		di.serv = service.NewService(di.Repository(ctx), di.Redis(ctx))
 	}
 
 	return di.serv
@@ -76,4 +99,28 @@ func (di *DIContainer) Handler(ctx context.Context) *handlers.MatchMakerHandler 
 
 	return di.handler
 
+}
+
+func (di *DIContainer) PlayerSelectionService(ctx context.Context) playerSelection.Service {
+	if di.playerSelectionService == nil {
+		di.playerSelectionService = service.NewService(di.Repository(ctx), di.Redis(ctx))
+	}
+
+	return di.playerSelectionService
+}
+
+func (di *DIContainer) LogGroups(_ context.Context) playerSelection.LogGroups {
+	if di.logGroups == nil {
+		di.logGroups = console.NewLogGroups(di.log)
+	}
+
+	return di.logGroups
+}
+
+func (di *DIContainer) PlayerSelection(ctx context.Context) playerSelection.PlayerSelectionInterface {
+	if di.playerSelection == nil {
+		di.playerSelection = playerSelection.NewPlayerSelection(di.cfg.MatchSettings, di.log, di.PlayerSelectionService(ctx), di.LogGroups(ctx))
+	}
+
+	return di.playerSelection
 }

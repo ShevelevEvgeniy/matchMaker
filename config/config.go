@@ -7,8 +7,10 @@ import (
 )
 
 type Config struct {
-	HTTPServer HTTPServer
-	DB         DB
+	HTTPServer    HTTPServer
+	DB            DB
+	MatchSettings MatchSettings
+	Redis         Redis
 }
 
 func MustLoad(log *zap.Logger) (*Config, error) {
@@ -33,5 +35,9 @@ func logNonSecretConfig(log *zap.Logger, cfg *Config) {
 		zap.String("DB Port", cfg.DB.Port),
 		zap.String("DB Name", cfg.DB.DBName),
 		zap.String("DB DriverName", cfg.DB.DriverName),
+		zap.String("Redis Protocol", cfg.Redis.Protocol),
+		zap.String("Redis Host", cfg.Redis.Host),
+		zap.String("Redis Port", cfg.Redis.Port),
+		zap.String("Redis DB", cfg.Redis.DB),
 	)
 }
