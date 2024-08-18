@@ -9,5 +9,4 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_users_search_start_time_skill_latency_searching_match
-    ON users (search_match, search_start_time, skill, latency);
+CREATE INDEX idx_users_search_match ON users search_match;
