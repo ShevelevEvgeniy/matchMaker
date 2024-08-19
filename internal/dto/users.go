@@ -1,7 +1,7 @@
 package dto
 
 type Users struct {
-	User []User `json:"users" validate:"required"`
+	User []User `json:"users" validate:"required,dive"`
 }
 
 type User struct {

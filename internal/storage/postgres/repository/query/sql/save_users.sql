@@ -1,5 +1,5 @@
 INSERT INTO users (name, skill, latency, search_match, search_start_time)
-VALUES `%s`
+VALUES %s
 ON CONFLICT (name)
 DO UPDATE SET
     skill = EXCLUDED.skill,

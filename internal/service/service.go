@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
@@ -36,6 +37,8 @@ func NewService(repo Repository, cache Cache) *Service {
 }
 
 func (s *Service) SaveUsers(ctx context.Context, users dto.Users) error {
+	fmt.Println(users)
+	fmt.Println(userConverter.ServiceToRepoModels(users))
 	return s.repo.SaveUsers(ctx, userConverter.ServiceToRepoModels(users))
 }
 

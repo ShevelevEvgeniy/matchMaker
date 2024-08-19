@@ -11,14 +11,14 @@ import (
 func ServiceToRepoModels(users dto.Users) []models.User {
 	repoUsers := make([]models.User, len(users.User))
 
-	for _, user := range users.User {
-		repoUsers = append(repoUsers, models.User{
+	for i, user := range users.User {
+		repoUsers[i] = models.User{
 			Name:            user.Name,
 			Skill:           user.Skill,
 			Latency:         user.Latency,
 			SearchMatch:     true,
 			SearchStartTime: time.Now(),
-		})
+		}
 	}
 
 	return repoUsers
@@ -35,7 +35,7 @@ func UsersToIds(users []models.User) []int64 {
 }
 
 func UsersToMatrix(users []models.User) ([]clust.Coordinates, map[int64]int) {
-	var dataset []clust.Coordinates
+	dataset := make([]clust.Coordinates, len(users))
 	userIndexMap := make(map[int64]int)
 
 	for i, user := range users {

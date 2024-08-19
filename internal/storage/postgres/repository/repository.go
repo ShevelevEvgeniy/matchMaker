@@ -44,7 +44,6 @@ func (r *Repository) GetUsersInSearch(ctx context.Context, tx pgx.Tx, batchSize 
 	for rows.Next() {
 		var user models.User
 		if err = rows.Scan(&user.ID, &user.Name, &user.Skill, &user.Latency, &user.SearchStartTime); err != nil {
-			fmt.Println(err)
 			return nil, errors.Wrap(err, "failed to get users in search")
 		}
 
@@ -78,7 +77,9 @@ func (r *Repository) SaveUsers(ctx context.Context, users []models.User) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")
 	}
-	defer tx.Rollback(ctx)
+	defer func(tx pgx.Tx, ctx context.Context) {
+		_ = tx.Rollback(ctx)
+	}(tx, ctx)
 
 	query := queryStr.SaveUsers
 	values := make([]interface{}, 0, len(users)*5)
@@ -89,11 +90,9 @@ func (r *Repository) SaveUsers(ctx context.Context, users []models.User) error {
 		values = append(values, user.Name, user.Skill, user.Latency, user.SearchMatch, user.SearchStartTime)
 	}
 
-	query = fmt.Sprintf(query, strings.Join(valueStrings, ", "))
+	finalQuery := fmt.Sprintf(query, strings.Join(valueStrings, ", "))
 
-	fmt.Println(query)
-	fmt.Println(values)
-	_, err = tx.Exec(ctx, query, values...)
+	_, err = tx.Exec(ctx, finalQuery, values...)
 	if err != nil {
 		return errors.Wrap(err, "failed to insert users")
 	}

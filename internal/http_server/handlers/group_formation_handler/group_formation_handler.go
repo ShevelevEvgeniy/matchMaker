@@ -2,7 +2,6 @@ package player_selection_handler
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -107,7 +106,6 @@ func (g *GroupFormationHandler) generateGroups(ctx context.Context, usersChan <-
 			return
 		case users, ok := <-usersChan:
 			if !ok {
-				fmt.Println(ok)
 				g.log.Info("users channel closed, skipping group generation")
 				return
 			}
