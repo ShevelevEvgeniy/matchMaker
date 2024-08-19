@@ -9,10 +9,6 @@ import (
 	"matchMaker/config"
 )
 
-const (
-	RemainingUsersKey = "remaining_users"
-)
-
 func Connect(ctx context.Context, cfg config.Redis) (*redis.Client, error) {
 	url := fmt.Sprintf("%s://%s:%s@%s:%s/%s?protocol=%s",
 		cfg.Protocol, cfg.UserName, cfg.Password, cfg.Host, cfg.Port, cfg.DB, cfg.Params)

@@ -21,7 +21,7 @@ func NewFormedGroupEvent(log *zap.Logger) *FormedGroupEvent {
 	}
 }
 
-func (e *FormedGroupEvent) Handle(ctx context.Context, msg Message) {
+func (e *FormedGroupEvent) Handle(_ context.Context, msg Message) {
 	e.log.Info("formed group event received")
 
 	group := msg.Value.(dto.Group)
