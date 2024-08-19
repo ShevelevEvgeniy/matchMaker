@@ -3,7 +3,6 @@ package cache_repository
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
@@ -30,12 +29,18 @@ func (c *CacheRepository) Watch(ctx context.Context, fn func(tx *redis.Tx) error
 }
 
 func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.User) error {
-	data, err := json.Marshal(users)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal users")
+	pipe := c.redis.Pipeline()
+
+	for _, user := range users {
+		data, err := json.Marshal(user)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal user")
+		}
+
+		err = pipe.RPush(ctx, c.keys.RemainingUsersKey, data).Err()
 	}
 
-	err = c.redis.RPush(ctx, c.keys.RemainingUsersKey, data, time.Hour).Err()
+	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to set remaining users")
 	}
@@ -44,19 +49,23 @@ func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.
 }
 
 func (c *CacheRepository) GetRemainingUsers(ctx context.Context, tx *redis.Tx) ([]models.User, error) {
-	usersBytes, err := tx.Get(ctx, c.keys.RemainingUsersKey).Bytes()
+	userBytesList, err := tx.LRange(ctx, c.keys.RemainingUsersKey, 0, -1).Result()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get remaining users")
 	}
 
-	if len(usersBytes) == 0 {
+	if len(userBytesList) == 0 {
 		return nil, errors.Wrap(err, "not found remaining users")
 	}
 
 	var users []models.User
-	err = json.Unmarshal(usersBytes, &users)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal users")
+	for _, userBytes := range userBytesList {
+		var user models.User
+		err = json.Unmarshal([]byte(userBytes), &user)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal user")
+		}
+		users = append(users, user)
 	}
 
 	return users, nil

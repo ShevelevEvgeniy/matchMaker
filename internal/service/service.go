@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +19,7 @@ type Repository interface {
 }
 
 type Cache interface {
-	Watch(ctx context.Context, fn func(tx *redis.Tx) error, keys ...string) error
+	Watch(ctx context.Context, fn func(tx *redis.Tx) error) error
 	SetRemainingUsers(ctx context.Context, users []models.User) error
 	GetRemainingUsers(ctx context.Context, tx *redis.Tx) ([]models.User, error)
 	DelRemainingUsers(ctx context.Context, tx *redis.Tx) error
@@ -39,9 +38,12 @@ func NewService(repo Repository, cache Cache) *Service {
 }
 
 func (s *Service) SaveUsers(ctx context.Context, users dto.Users) error {
-	fmt.Println(users)
-	fmt.Println(userConverter.ServiceToRepoModels(users))
-	return s.repo.SaveUsers(ctx, userConverter.ServiceToRepoModels(users))
+	err := s.repo.SaveUsers(ctx, userConverter.ServiceToRepoModels(users))
+	if err != nil {
+		return errors.Wrap(err, "failed to save users")
+	}
+
+	return nil
 }
 
 func (s *Service) GetUsersInSearch(ctx context.Context, batchSize int) ([]models.User, error) {
