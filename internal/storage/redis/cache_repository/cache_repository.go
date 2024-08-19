@@ -48,7 +48,7 @@ func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.
 		return errors.Wrap(err, "failed to marshal users")
 	}
 
-	err = c.redis.Set(ctx, c.keys.RemainingUsersKey, data, time.Hour).Err()
+	err = c.redis.RPush(ctx, c.keys.RemainingUsersKey, data, time.Hour).Err()
 	if err != nil {
 		return errors.Wrap(err, "failed to set remaining users")
 	}

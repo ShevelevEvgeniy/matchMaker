@@ -37,7 +37,7 @@ func (a *App) Run(ctx context.Context) error {
 	PLCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go di.PlayerSelection(ctx).Run(PLCtx)
+	go di.GroupFormationHandler(ctx).Run(PLCtx)
 
 	server.Shutdown(ctx, a.log, a.cfg.HTTPServer.StopTimeout)
 

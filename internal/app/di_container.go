@@ -11,7 +11,7 @@ import (
 	"matchMaker/config"
 	"matchMaker/internal/http_server/api/v1/handlers"
 	"matchMaker/internal/http_server/events"
-	playerSelection "matchMaker/internal/http_server/handlers/player_selection"
+	playerSelection "matchMaker/internal/http_server/handlers/group_formation_handler"
 	"matchMaker/internal/service"
 	dbConn "matchMaker/internal/storage/postgres/db_connection"
 	"matchMaker/internal/storage/postgres/repository"
@@ -29,7 +29,7 @@ type DIContainer struct {
 	repo                   service.Repository
 	serv                   handlers.Service
 	handler                *handlers.MatchMakerHandler
-	playerSelection        *playerSelection.PlayerSelection
+	playerSelection        *playerSelection.GroupFormationHandler
 	playerSelectionService playerSelection.Service
 	formedGroupEvent       playerSelection.Events
 }
@@ -111,7 +111,7 @@ func (di *DIContainer) Handler(ctx context.Context) *handlers.MatchMakerHandler 
 
 }
 
-func (di *DIContainer) PlayerSelectionService(ctx context.Context) playerSelection.Service {
+func (di *DIContainer) GroupFormationHandlerService(ctx context.Context) playerSelection.Service {
 	if di.playerSelectionService == nil {
 		di.playerSelectionService = service.NewService(di.Repository(ctx), di.Cache(ctx))
 	}
@@ -127,9 +127,9 @@ func (di *DIContainer) FormedGroupEvent(_ context.Context) playerSelection.Event
 	return di.formedGroupEvent
 }
 
-func (di *DIContainer) PlayerSelection(ctx context.Context) *playerSelection.PlayerSelection {
+func (di *DIContainer) GroupFormationHandler(ctx context.Context) *playerSelection.GroupFormationHandler {
 	if di.playerSelection == nil {
-		di.playerSelection = playerSelection.NewPlayerSelection(di.cfg.MatchSettings, di.log, di.PlayerSelectionService(ctx), di.FormedGroupEvent(ctx))
+		di.playerSelection = playerSelection.NewPlayerSelection(di.cfg.MatchSettings, di.log, di.GroupFormationHandlerService(ctx), di.FormedGroupEvent(ctx))
 	}
 
 	return di.playerSelection
