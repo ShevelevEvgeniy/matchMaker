@@ -9,4 +9,4 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_users_search_match ON users search_match;
+CREATE INDEX idx_users_search_match ON users (search_match);

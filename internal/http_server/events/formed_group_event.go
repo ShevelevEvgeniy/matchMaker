@@ -26,7 +26,7 @@ func (e *FormedGroupEvent) Handle(_ context.Context, msg Message) {
 
 	group := msg.Value.(dto.Group)
 
-	e.fillingMetrics(group)
+	e.fillingMetrics(&group)
 
 	e.printGroupInfo(group)
 }
@@ -34,21 +34,26 @@ func (e *FormedGroupEvent) Handle(_ context.Context, msg Message) {
 func (e *FormedGroupEvent) printGroupInfo(group dto.Group) {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("Group #%d:\n", group.GroupID))
-	builder.WriteString(fmt.Sprintf("Min Skill: %.2f, Max Skill: %.2f, Avg Skill: %.2f\n", group.MinSkill, group.MaxSkill, group.AvgSkill))
-	builder.WriteString(fmt.Sprintf("Min Latency: %.2f, Max Latency: %.2f, Avg Latency: %.2f\n", group.MinLatency, group.MaxLatency, group.AvgLatency))
-	builder.WriteString(fmt.Sprintf("Min Time Spent in Queue: %v, Max Time Spent in Queue: %v, Avg Time Spent in Queue: %v\n",
+	builder.WriteString(fmt.Sprintf("\nGroup #%d:\n", group.GroupID))
+	builder.WriteString(fmt.Sprintf("Skill: min = %.2f, max = %.2f, avg = %.2f\n", group.MinSkill, group.MaxSkill, group.AvgSkill))
+	builder.WriteString(fmt.Sprintf("Latency: min = %.2f, max = %.2f, avg = %.2f\n", group.MinLatency, group.MaxLatency, group.AvgLatency))
+	builder.WriteString(fmt.Sprintf("Time Spent in Queue: min = %v, max = %v, avg = %v\n",
 		group.MinTimeSpentInQueue, group.MaxTimeSpentInQueue, group.AvgTimeSpentInQueue))
 
-	builder.WriteString("Users:\n")
-	for _, user := range group.Users {
-		builder.WriteString(fmt.Sprintf("- %s\n", user.Name))
+	builder.WriteString("Users: ")
+	for i, user := range group.Users {
+		if i == 0 {
+			builder.WriteString(fmt.Sprintf("%s", user.Name))
+			continue
+		}
+
+		builder.WriteString(fmt.Sprintf(", %s", user.Name))
 	}
 
-	e.log.Info(builder.String())
+	fmt.Println(builder.String())
 }
 
-func (e *FormedGroupEvent) fillingMetrics(group dto.Group) {
+func (e *FormedGroupEvent) fillingMetrics(group *dto.Group) {
 	if len(group.Users) == 0 {
 		return
 	}
@@ -64,16 +69,25 @@ func (e *FormedGroupEvent) fillingMetrics(group dto.Group) {
 	group.MinTimeSpentInQueue = time.Duration(math.MaxInt64)
 	group.MaxTimeSpentInQueue = 0
 
-	for i := range group.Users {
-		user := group.Users[i]
+	for _, user := range group.Users {
+		e.log.Info("Processing user",
+			zap.String("Name", user.Name),
+			zap.Float64("Skill", user.Skill),
+			zap.Float64("Latency", user.Latency),
+			zap.Time("SearchStartTime", user.SearchStartTime),
+		)
 
-		group.MinSkill = math.Min(group.MinSkill, user.Skill)
-		group.MaxSkill = math.Max(group.MaxSkill, user.Skill)
-		totalSkill += user.Skill
+		if user.Skill != 0 {
+			group.MinSkill = math.Min(group.MinSkill, user.Skill)
+			group.MaxSkill = math.Max(group.MaxSkill, user.Skill)
+			totalSkill += user.Skill
+		}
 
-		group.MinLatency = math.Min(group.MinLatency, user.Latency)
-		group.MaxLatency = math.Max(group.MaxLatency, user.Latency)
-		totalLatency += user.Latency
+		if user.Latency != 0 {
+			group.MinLatency = math.Min(group.MinLatency, user.Latency)
+			group.MaxLatency = math.Max(group.MaxLatency, user.Latency)
+			totalLatency += user.Latency
+		}
 
 		timeSpentInQueue := time.Since(user.SearchStartTime)
 		if timeSpentInQueue < group.MinTimeSpentInQueue {
@@ -85,7 +99,9 @@ func (e *FormedGroupEvent) fillingMetrics(group dto.Group) {
 		totalTimeSpentInQueue += timeSpentInQueue
 	}
 
-	group.AvgSkill = totalSkill / float64(len(group.Users))
-	group.AvgLatency = totalLatency / float64(len(group.Users))
-	group.AvgTimeSpentInQueue = totalTimeSpentInQueue / time.Duration(len(group.Users))
+	if len(group.Users) > 0 {
+		group.AvgSkill = totalSkill / float64(len(group.Users))
+		group.AvgLatency = totalLatency / float64(len(group.Users))
+		group.AvgTimeSpentInQueue = totalTimeSpentInQueue / time.Duration(len(group.Users))
+	}
 }

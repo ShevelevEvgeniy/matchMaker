@@ -18,8 +18,8 @@ func ServiceToRepoModel(user dto.User) models.User {
 	}
 }
 
-func UsersToIds(users []models.User) []int {
-	IDs := make([]int, len(users))
+func UsersToIds(users []models.User) []int64 {
+	IDs := make([]int64, len(users))
 
 	for i, user := range users {
 		IDs[i] = user.ID
@@ -28,9 +28,9 @@ func UsersToIds(users []models.User) []int {
 	return IDs
 }
 
-func UsersToMatrix(users []models.User) ([]clust.Coordinates, map[int]int) {
+func UsersToMatrix(users []models.User) ([]clust.Coordinates, map[int64]int) {
 	var dataset []clust.Coordinates
-	userIndexMap := make(map[int]int)
+	userIndexMap := make(map[int64]int)
 
 	for i, user := range users {
 		obs := clust.Coordinates{

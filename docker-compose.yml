@@ -25,6 +25,9 @@ services:
             HTTP_SERVER_NAME: ${HTTP_SERVER_NAME}
             REDIS_HOST: ${REDIS_HOST}
             REDIS_PORT: ${REDIS_PORT}
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
+            REDIS_DB: ${REDIS_DB}
+            REMAINING_USERS_KEY: ${REMAINING_USERS_KEY}
 
     match_maker_db:
         restart: always
@@ -42,3 +45,9 @@ services:
         image: redis:alpine
         ports:
             - ${REDIS_PORT}:${REDIS_PORT}
+        environment:
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
+        volumes:
+            - ./redis.conf:/usr/local/etc/redis/redis.conf
+        command: >
+            --requirepass ${REDIS_PASSWORD}

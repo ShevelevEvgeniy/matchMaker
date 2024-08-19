@@ -13,7 +13,7 @@ import (
 type Repository interface {
 	Begin(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
 	SaveUsers(ctx context.Context, user models.User) error
-	UnmarkSearch(ctx context.Context, tx pgx.Tx, usersId []int) error
+	UnmarkSearch(ctx context.Context, tx pgx.Tx, usersId []int64) error
 	GetUsersInSearch(ctx context.Context, tx pgx.Tx, groupSize int) ([]models.User, error)
 }
 
@@ -21,6 +21,7 @@ type Cache interface {
 	SetRemainingUsers(ctx context.Context, users []models.User) error
 	GetRemainingUsers(ctx context.Context) ([]models.User, error)
 	DelRemainingUsers(ctx context.Context) error
+	ExistsKey(ctx context.Context) bool
 }
 type Service struct {
 	repo  Repository
@@ -49,6 +50,8 @@ func (s *Service) GetUsersInSearch(ctx context.Context, batchSize int) ([]models
 		if rollbackErr := tx.Rollback(ctx); err != nil {
 			err = errors.Wrap(rollbackErr, "failed to rollback transaction")
 		}
+
+		return nil, errors.Wrap(err, "failed to get users in search")
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -82,6 +85,10 @@ func (s *Service) SaveRemainingUsers(ctx context.Context, users []models.User) e
 }
 
 func (s *Service) GetAndRemoveRemainingUsers(ctx context.Context) ([]models.User, bool, error) {
+	ok := s.cache.ExistsKey(ctx)
+	if !ok {
+		return nil, false, nil
+	}
 	users, err := s.cache.GetRemainingUsers(ctx)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "failed to get remaining users")
@@ -92,5 +99,5 @@ func (s *Service) GetAndRemoveRemainingUsers(ctx context.Context) ([]models.User
 		return nil, false, errors.Wrap(err, "failed to delete remaining users")
 	}
 
-	return users, false, nil
+	return users, true, nil
 }

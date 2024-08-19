@@ -35,9 +35,7 @@ func logNonSecretConfig(log *zap.Logger, cfg *Config) {
 		zap.String("db port", cfg.DB.Port),
 		zap.String("db name", cfg.DB.DBName),
 		zap.String("db driverName", cfg.DB.DriverName),
-		zap.String("redis protocol", cfg.Redis.Protocol),
 		zap.String("redis host", cfg.Redis.Host),
 		zap.String("redis port", cfg.Redis.Port),
-		zap.String("redis db", cfg.Redis.DB),
 	)
 }

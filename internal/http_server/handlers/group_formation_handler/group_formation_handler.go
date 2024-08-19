@@ -2,6 +2,7 @@ package player_selection_handler
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -50,10 +51,6 @@ func NewPlayerSelection(
 	}
 }
 
-func (g *GroupFormationHandler) delay() {
-	time.Sleep(g.cfg.Delay * time.Second)
-}
-
 func (g *GroupFormationHandler) Run(ctx context.Context) {
 	g.log.Info("player selection started")
 
@@ -79,10 +76,19 @@ func (g *GroupFormationHandler) selectUsers(ctx context.Context) <-chan []models
 				users, err := g.service.GetUsersInSearch(ctx, g.cfg.BatchSize)
 				if err != nil {
 					g.log.Error("error occurred on getting users in search:", zap.String("error", err.Error()))
+					continue
 				}
 
 				if len(users) == 0 {
-					g.delay()
+					g.log.Info("no users found in search, waiting...")
+					select {
+					case <-ctx.Done():
+						g.log.Error("context done, skipping group generation", zap.String("error", ctx.Err().Error()))
+						return
+					case <-time.After(g.cfg.Delay):
+						g.log.Info("no users found in search, waiting...")
+					}
+
 					continue
 				}
 
@@ -102,6 +108,7 @@ func (g *GroupFormationHandler) generateGroups(ctx context.Context, usersChan <-
 			return
 		case users, ok := <-usersChan:
 			if !ok {
+				fmt.Println(ok)
 				g.log.Info("users channel closed, skipping group generation")
 				return
 			}
@@ -124,7 +131,7 @@ func (g *GroupFormationHandler) createGroupsUsingNearestNeighbors(ctx context.Co
 	userMatrix, userIndexMap := userConverter.UsersToMatrix(users)
 
 	var remainingUsers []models.User
-	groupedUsers := make(map[int]struct{})
+	groupedUsers := make(map[int64]struct{})
 
 	for i := 0; i < len(users); i++ {
 		if _, exists := groupedUsers[users[i].ID]; exists {
@@ -151,17 +158,17 @@ func (g *GroupFormationHandler) createGroupsUsingNearestNeighbors(ctx context.Co
 	}
 }
 
-func (g *GroupFormationHandler) findClosestUsers(userMatrix []clusters.Coordinates, index int, groupedUsers map[int]struct{}) []dto.UserDistance {
-	distances := make([]dto.UserDistance, len(userMatrix)-1)
+func (g *GroupFormationHandler) findClosestUsers(userMatrix []clusters.Coordinates, index int, groupedUsers map[int64]struct{}) []dto.UserDistance {
+	var distances []dto.UserDistance
 
 	for j, userCoordinates := range userMatrix {
-		_, exists := groupedUsers[j]
+		_, exists := groupedUsers[int64(j)]
 		if j == index || exists {
 			continue
 		}
 
 		distance := g.euclideanDistance(userMatrix[index], userCoordinates)
-		distances[j] = dto.UserDistance{Index: j, Distance: distance}
+		distances = append(distances, dto.UserDistance{Index: int64(j), Distance: distance})
 	}
 
 	sort.Slice(distances, func(i, j int) bool {
@@ -171,7 +178,7 @@ func (g *GroupFormationHandler) findClosestUsers(userMatrix []clusters.Coordinat
 	return distances
 }
 
-func (g *GroupFormationHandler) formGroup(users []models.User, closestUsers []dto.UserDistance, groupedUsers map[int]struct{}) dto.Group {
+func (g *GroupFormationHandler) formGroup(users []models.User, closestUsers []dto.UserDistance, groupedUsers map[int64]struct{}) dto.Group {
 	var group dto.Group
 	group.Users = []models.User{}
 
