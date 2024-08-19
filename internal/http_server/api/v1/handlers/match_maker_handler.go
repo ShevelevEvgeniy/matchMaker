@@ -9,11 +9,11 @@ import (
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
 	DTOs "matchMaker/internal/dto"
-	"matchMaker/internal/http_server/api/v1/handlers/response"
+	"matchMaker/internal/dto/response"
 )
 
 type Service interface {
-	SaveUsers(ctx context.Context, user DTOs.User) error
+	SaveUsers(ctx context.Context, user DTOs.Users) error
 }
 
 type MatchMakerHandler struct {
@@ -34,7 +34,7 @@ func (h *MatchMakerHandler) SaveUsers(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.log.Info("Received HTTP POST request: " + r.RequestURI)
 
-		var dto DTOs.User
+		var dto DTOs.Users
 		err := json.NewDecoder(r.Body).Decode(&dto)
 		if err != nil {
 			h.log.Error("failed to decode user", zap.Error(err))

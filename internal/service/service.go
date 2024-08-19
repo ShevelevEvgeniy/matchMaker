@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
@@ -12,7 +13,7 @@ import (
 
 type Repository interface {
 	Begin(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
-	SaveUsers(ctx context.Context, user models.User) error
+	SaveUsers(ctx context.Context, user []models.User) error
 	UnmarkSearch(ctx context.Context, tx pgx.Tx, usersId []int64) error
 	GetUsersInSearch(ctx context.Context, tx pgx.Tx, groupSize int) ([]models.User, error)
 }
@@ -35,8 +36,10 @@ func NewService(repo Repository, cache Cache) *Service {
 	}
 }
 
-func (s *Service) SaveUsers(ctx context.Context, user dto.User) error {
-	return s.repo.SaveUsers(ctx, userConverter.ServiceToRepoModel(user))
+func (s *Service) SaveUsers(ctx context.Context, users dto.Users) error {
+	fmt.Println(users)
+	fmt.Println(userConverter.ServiceToRepoModels(users))
+	return s.repo.SaveUsers(ctx, userConverter.ServiceToRepoModels(users))
 }
 
 func (s *Service) GetUsersInSearch(ctx context.Context, batchSize int) ([]models.User, error) {

@@ -1,5 +1,9 @@
 package dto
 
+type Users struct {
+	User []User `json:"users" validate:"required,dive"`
+}
+
 type User struct {
 	Name    string  `json:"name" validate:"required"`
 	Skill   float64 `json:"skill" validate:"required,gt=0,lt=11"`
