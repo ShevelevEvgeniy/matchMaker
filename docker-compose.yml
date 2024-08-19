@@ -41,6 +41,7 @@ services:
             POSTGRES_DB: ${DB_NAME}
 
     match_maker_redis:
+        restart: always
         container_name: ${REDIS_NAME}
         image: redis:alpine
         ports:

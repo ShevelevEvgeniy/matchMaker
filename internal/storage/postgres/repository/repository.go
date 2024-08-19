@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,12 +73,33 @@ func (r *Repository) UnmarkSearch(ctx context.Context, tx pgx.Tx, usersIDs []int
 	return nil
 }
 
-func (r *Repository) SaveUsers(ctx context.Context, user models.User) error {
-	query := queryStr.AddUser
-
-	_, err := r.db.Exec(ctx, query, user.Name, user.Skill, user.Latency, user.SearchMatch, user.SearchStartTime)
+func (r *Repository) SaveUsers(ctx context.Context, users []models.User) error {
+	tx, err := r.Begin(ctx, pgx.TxOptions{})
 	if err != nil {
-		return errors.Wrap(err, "failed to add user")
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+	defer tx.Rollback(ctx)
+
+	query := queryStr.SaveUsers
+	values := make([]interface{}, 0, len(users)*5)
+	valueStrings := make([]string, len(users))
+
+	for i, user := range users {
+		valueStrings[i] = fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", i*5+1, i*5+2, i*5+3, i*5+4, i*5+5)
+		values = append(values, user.Name, user.Skill, user.Latency, user.SearchMatch, user.SearchStartTime)
+	}
+
+	query = fmt.Sprintf(query, strings.Join(valueStrings, ", "))
+
+	fmt.Println(query)
+	fmt.Println(values)
+	_, err = tx.Exec(ctx, query, values...)
+	if err != nil {
+		return errors.Wrap(err, "failed to insert users")
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
 	}
 
 	return nil
