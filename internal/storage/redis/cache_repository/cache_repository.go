@@ -42,6 +42,15 @@ func (c *CacheRepository) GetRemainingUsers(ctx context.Context) ([]models.User,
 	return users, nil
 }
 
+func (c *CacheRepository) ExistsKey(ctx context.Context) bool {
+	ok := c.redis.Exists(ctx, c.keys.RemainingUsersKey).Val()
+	if ok != 1 {
+		return false
+	}
+
+	return true
+}
+
 func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.User) error {
 	data, err := json.Marshal(users)
 	if err != nil {

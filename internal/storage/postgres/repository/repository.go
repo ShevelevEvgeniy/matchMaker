@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,7 +42,8 @@ func (r *Repository) GetUsersInSearch(ctx context.Context, tx pgx.Tx, batchSize 
 
 	for rows.Next() {
 		var user models.User
-		if err = rows.Scan(&user.ID, &user.Name, &user.Skill, &user.Latency, &user.SearchMatch, &user.SearchStartTime); err != nil {
+		if err = rows.Scan(&user.ID, &user.Name, &user.Skill, &user.Latency, &user.SearchStartTime); err != nil {
+			fmt.Println(err)
 			return nil, errors.Wrap(err, "failed to get users in search")
 		}
 
@@ -55,7 +57,7 @@ func (r *Repository) GetUsersInSearch(ctx context.Context, tx pgx.Tx, batchSize 
 	return users, nil
 }
 
-func (r *Repository) UnmarkSearch(ctx context.Context, tx pgx.Tx, usersIDs []int) error {
+func (r *Repository) UnmarkSearch(ctx context.Context, tx pgx.Tx, usersIDs []int64) error {
 	if len(usersIDs) == 0 {
 		return nil
 	}

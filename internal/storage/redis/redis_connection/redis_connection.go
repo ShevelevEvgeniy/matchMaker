@@ -10,16 +10,15 @@ import (
 )
 
 func Connect(ctx context.Context, cfg config.Redis) (*redis.Client, error) {
-	url := fmt.Sprintf("%s://%s:%s@%s:%s/%s?protocol=%s",
-		cfg.Protocol, cfg.UserName, cfg.Password, cfg.Host, cfg.Port, cfg.DB, cfg.Params)
-
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse redis url")
+	opts := &redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Password: cfg.Password,
+		DB:       cfg.DB,
 	}
+
 	client := redis.NewClient(opts)
 
-	_, err = client.Ping(ctx).Result()
+	_, err := client.Ping(ctx).Result()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to ping redis server")
 	}
