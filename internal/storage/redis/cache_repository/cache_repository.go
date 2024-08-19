@@ -23,8 +23,28 @@ func NewCacheRepository(redis *redis.Client, cfg config.Keys) *CacheRepository {
 	}
 }
 
-func (c *CacheRepository) GetRemainingUsers(ctx context.Context) ([]models.User, error) {
-	usersBytes, err := c.redis.Get(ctx, c.keys.RemainingUsersKey).Bytes()
+func (c *CacheRepository) Watch(ctx context.Context, fn func(tx *redis.Tx) error) error {
+	return c.redis.Watch(ctx, func(tx *redis.Tx) error {
+		return fn(tx)
+	}, c.keys.RemainingUsersKey)
+}
+
+func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.User) error {
+	data, err := json.Marshal(users)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal users")
+	}
+
+	err = c.redis.RPush(ctx, c.keys.RemainingUsersKey, data, time.Hour).Err()
+	if err != nil {
+		return errors.Wrap(err, "failed to set remaining users")
+	}
+
+	return nil
+}
+
+func (c *CacheRepository) GetRemainingUsers(ctx context.Context, tx *redis.Tx) ([]models.User, error) {
+	usersBytes, err := tx.Get(ctx, c.keys.RemainingUsersKey).Bytes()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get remaining users")
 	}
@@ -51,22 +71,8 @@ func (c *CacheRepository) ExistsKey(ctx context.Context) bool {
 	return true
 }
 
-func (c *CacheRepository) SetRemainingUsers(ctx context.Context, users []models.User) error {
-	data, err := json.Marshal(users)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal users")
-	}
-
-	err = c.redis.RPush(ctx, c.keys.RemainingUsersKey, data, time.Hour).Err()
-	if err != nil {
-		return errors.Wrap(err, "failed to set remaining users")
-	}
-
-	return nil
-}
-
-func (c *CacheRepository) DelRemainingUsers(ctx context.Context) error {
-	err := c.redis.Del(ctx, c.keys.RemainingUsersKey).Err()
+func (c *CacheRepository) DelRemainingUsers(ctx context.Context, tx *redis.Tx) error {
+	err := tx.Del(ctx, c.keys.RemainingUsersKey).Err()
 	if err != nil {
 		return errors.Wrap(err, "failed to delete remaining users")
 	}

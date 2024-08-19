@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 	userConverter "matchMaker/internal/converter/user_converter"
@@ -19,9 +20,10 @@ type Repository interface {
 }
 
 type Cache interface {
+	Watch(ctx context.Context, fn func(tx *redis.Tx) error, keys ...string) error
 	SetRemainingUsers(ctx context.Context, users []models.User) error
-	GetRemainingUsers(ctx context.Context) ([]models.User, error)
-	DelRemainingUsers(ctx context.Context) error
+	GetRemainingUsers(ctx context.Context, tx *redis.Tx) ([]models.User, error)
+	DelRemainingUsers(ctx context.Context, tx *redis.Tx) error
 	ExistsKey(ctx context.Context) bool
 }
 type Service struct {
@@ -88,18 +90,31 @@ func (s *Service) SaveRemainingUsers(ctx context.Context, users []models.User) e
 }
 
 func (s *Service) GetAndRemoveRemainingUsers(ctx context.Context) ([]models.User, bool, error) {
+	var users []models.User
+
 	ok := s.cache.ExistsKey(ctx)
 	if !ok {
 		return nil, false, nil
 	}
-	users, err := s.cache.GetRemainingUsers(ctx)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to get remaining users")
-	}
 
-	err = s.cache.DelRemainingUsers(ctx)
+	err := s.cache.Watch(ctx, func(tx *redis.Tx) error {
+		var err error
+
+		users, err = s.cache.GetRemainingUsers(ctx, tx)
+		if err != nil {
+			return errors.Wrap(err, "failed to get remaining users")
+		}
+
+		err = s.cache.DelRemainingUsers(ctx, tx)
+		if err != nil {
+			return errors.Wrap(err, "failed to delete remaining users")
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to delete remaining users")
+		return nil, false, errors.Wrap(err, "failed to watch cache")
 	}
 
 	return users, true, nil
