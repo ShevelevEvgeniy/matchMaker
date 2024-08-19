@@ -8,4 +8,9 @@ type Redis struct {
 	Port     string `envconfig:"REDIS_PORT" required:"true"`
 	DB       string `envconfig:"REDIS_DB" default:"0"`
 	Params   string `envconfig:"REDIS_PARAMS" default:"?protocol=3"`
+	Keys     Keys
+}
+
+type Keys struct {
+	RemainingUsersKey string `envconfig:"REMAINING_USERS_KEY" required:"true"`
 }

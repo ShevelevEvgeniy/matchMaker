@@ -37,11 +37,7 @@ func (a *App) Run(ctx context.Context) error {
 	PLCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	di.PlayerSelection(ctx).Run(PLCtx)
-	if err != nil {
-		a.log.Error("error occurred on player_selection shutting down:", zap.String("error", err.Error()))
-		return errors.Wrap(err, "error occurred on player_selection shutting down")
-	}
+	go di.PlayerSelection(ctx).Run(PLCtx)
 
 	server.Shutdown(ctx, a.log, a.cfg.HTTPServer.StopTimeout)
 

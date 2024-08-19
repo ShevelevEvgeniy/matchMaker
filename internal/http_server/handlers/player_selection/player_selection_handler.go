@@ -4,13 +4,15 @@ import (
 	"context"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/muesli/clusters"
 	"go.uber.org/zap"
 	"matchMaker/config"
-	"matchMaker/internal/converter"
+	userConverter "matchMaker/internal/converter/user_converter"
 	"matchMaker/internal/dto"
+	"matchMaker/internal/http_server/events"
 	"matchMaker/internal/storage/postgres/repository/models"
 )
 
@@ -20,33 +22,31 @@ type Service interface {
 	GetAndRemoveRemainingUsers(ctx context.Context) ([]models.User, bool, error)
 }
 
-type LogGroups interface {
-	PrintGroupInfo(ctx context.Context, groups []dto.Group)
-}
-
-type PlayerSelectionInterface interface {
-	Run(ctx context.Context)
+type Events interface {
+	Handle(ctx context.Context, message events.Message)
 }
 
 type PlayerSelection struct {
-	cfg       config.MatchSettings
-	log       *zap.Logger
-	service   Service
-	logGroups LogGroups
+	cfg          config.MatchSettings
+	log          *zap.Logger
+	service      Service
+	events       Events
+	groupCounter int
+	mu           sync.Mutex
 }
 
 func NewPlayerSelection(
 	cfg config.MatchSettings,
 	log *zap.Logger,
 	service Service,
-	logGroups LogGroups,
+	events Events,
 ) *PlayerSelection {
 
 	return &PlayerSelection{
-		cfg:       cfg,
-		log:       log,
-		service:   service,
-		logGroups: logGroups,
+		cfg:     cfg,
+		log:     log,
+		service: service,
+		events:  events,
 	}
 }
 
@@ -58,27 +58,32 @@ func (p *PlayerSelection) Run(ctx context.Context) {
 	p.log.Info("player selection started")
 
 	usersChan := p.selectUsers(ctx)
-	go p.generateGroups(ctx, usersChan)
+
+	for i := 0; i < p.cfg.CountWorkers; i++ {
+		go p.generateGroups(ctx, usersChan)
+	}
 }
 
 func (p *PlayerSelection) selectUsers(ctx context.Context) <-chan []models.User {
-	usersChan := make(chan []models.User, 1)
+	usersChan := make(chan []models.User, p.cfg.CountWorkers)
 
 	go func() {
-		defer func() {
-			close(usersChan)
-		}()
+		defer close(usersChan)
 
 		for {
 			select {
 			case <-ctx.Done():
-				p.log.Info("context done, skipping user selection")
+				p.log.Error("context done, skipping group generation", zap.String("error", ctx.Err().Error()))
 				return
 			default:
 				users, err := p.service.GetUsersInSearch(ctx, p.cfg.BatchSize)
 				if err != nil {
 					p.log.Error("error occurred on getting users in search:", zap.String("error", err.Error()))
+				}
+
+				if len(users) == 0 {
 					p.delay()
+					continue
 				}
 
 				usersChan <- users
@@ -93,7 +98,7 @@ func (p *PlayerSelection) generateGroups(ctx context.Context, usersChan <-chan [
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("context done, skipping group generation")
+			p.log.Error("context done, skipping group generation", zap.String("error", ctx.Err().Error()))
 			return
 		case users, ok := <-usersChan:
 			if !ok {
@@ -106,52 +111,36 @@ func (p *PlayerSelection) generateGroups(ctx context.Context, usersChan <-chan [
 				p.log.Error("error occurred on getting cached users:", zap.String("error", cacheErr.Error()))
 			}
 
-			if len(users) == 0 {
-				p.log.Info("no users in search")
-				p.delay()
-				continue
-			}
-
 			if hasCachedUsers {
 				users = append(cachedUsers, users...)
 			}
 
-			groups := p.createGroupsUsingNearestNeighbors(ctx, users)
-			if len(groups) > 0 {
-				p.logGroups.PrintGroupInfo(ctx, groups)
-			}
+			p.createGroupsUsingNearestNeighbors(ctx, users)
 		}
 	}
 }
 
-func (p *PlayerSelection) createGroupsUsingNearestNeighbors(ctx context.Context, users []models.User) []dto.Group {
-	userMatrix, userIndexMap := converter.UsersToMatrix(users)
+func (p *PlayerSelection) createGroupsUsingNearestNeighbors(ctx context.Context, users []models.User) {
+	userMatrix, userIndexMap := userConverter.UsersToMatrix(users)
 
-	var groups []dto.Group
 	var remainingUsers []models.User
-	groupedUsers := make(map[int]bool)
+	groupedUsers := make(map[int]struct{})
 
 	for i := 0; i < len(users); i++ {
-		if groupedUsers[users[i].ID] {
+		if _, exists := groupedUsers[users[i].ID]; exists {
 			continue
 		}
 
-		currentGroup := dto.Group{Users: []models.User{}}
-		closestUsers := p.findClosestUsers(userMatrix, userIndexMap[users[i].ID])
-
-		for _, closest := range closestUsers {
-			if !groupedUsers[closest.Index] && p.isWithinSkillRange(users[closest.Index].Skill, users[i].Skill) {
-				groupedUsers[closest.Index] = true
-				currentGroup.Users = append(currentGroup.Users, users[closest.Index])
-			}
-		}
+		closestUsers := p.findClosestUsers(userMatrix, userIndexMap[users[i].ID], groupedUsers)
+		currentGroup := p.formGroup(users, closestUsers, groupedUsers)
 
 		if len(currentGroup.Users) == p.cfg.GroupSize {
-			groups = append(groups, currentGroup)
+			p.incrementGroupCounter()
+			currentGroup.GroupID = p.groupCounter
+
+			go p.events.Handle(ctx, events.Message{Value: currentGroup})
 		} else {
-			for _, user := range currentGroup.Users {
-				remainingUsers = append(remainingUsers, user)
-			}
+			remainingUsers = append(remainingUsers, currentGroup.Users...)
 		}
 	}
 
@@ -160,33 +149,44 @@ func (p *PlayerSelection) createGroupsUsingNearestNeighbors(ctx context.Context,
 			p.log.Error("error occurred on saving remaining users:", zap.String("error", err.Error()))
 		}
 	}
-
-	return groups
 }
 
-func (p *PlayerSelection) findClosestUsers(userMatrix []clusters.Coordinates, index int) []dto.UserDistance {
-	var distances []dto.UserDistance
+func (p *PlayerSelection) findClosestUsers(userMatrix []clusters.Coordinates, index int, groupedUsers map[int]struct{}) []dto.UserDistance {
+	distances := make([]dto.UserDistance, len(userMatrix)-1)
+
 	for j, userCoordinates := range userMatrix {
-		if j == index {
+		_, exists := groupedUsers[j]
+		if j == index || exists {
 			continue
 		}
+
 		distance := euclideanDistance(userMatrix[index], userCoordinates)
-		distances = append(distances, dto.UserDistance{Index: j, Distance: distance})
+		distances[j] = dto.UserDistance{Index: j, Distance: distance}
 	}
 
 	sort.Slice(distances, func(i, j int) bool {
 		return distances[i].Distance < distances[j].Distance
 	})
 
-	var closestUsers []dto.UserDistance
-	for _, dist := range distances {
-		if len(closestUsers) >= p.cfg.GroupSize {
-			break
+	return distances
+}
+
+func (p *PlayerSelection) formGroup(users []models.User, closestUsers []dto.UserDistance, groupedUsers map[int]struct{}) dto.Group {
+	var group dto.Group
+	group.Users = []models.User{}
+
+	for _, closest := range closestUsers {
+		if _, exists := groupedUsers[closest.Index]; !exists {
+			groupedUsers[closest.Index] = struct{}{}
+			group.Users = append(group.Users, users[closest.Index])
+
+			if len(group.Users) == p.cfg.GroupSize {
+				break
+			}
 		}
-		closestUsers = append(closestUsers, dist)
 	}
 
-	return closestUsers
+	return group
 }
 
 func euclideanDistance(a, b clusters.Coordinates) float64 {
@@ -198,6 +198,9 @@ func euclideanDistance(a, b clusters.Coordinates) float64 {
 	return math.Sqrt(sum)
 }
 
-func (p *PlayerSelection) isWithinSkillRange(skill1, skill2 float64) bool {
-	return math.Abs(skill1-skill2) <= p.cfg.RangeSkill
+func (p *PlayerSelection) incrementGroupCounter() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.groupCounter++
 }

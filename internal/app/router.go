@@ -18,7 +18,7 @@ func initRouter(ctx context.Context, di *DIContainer) *chi.Mux {
 	router.Use(middleware.RequestID)
 
 	router.Route(ApiV1Group, func(router chi.Router) {
-		router.Post(users, di.Handler(ctx).Users(ctx))
+		router.Post(users, di.Handler(ctx).SaveUsers(ctx))
 	})
 
 	return router

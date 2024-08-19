@@ -1,4 +1,4 @@
-package converter
+package user_converter
 
 import (
 	"time"

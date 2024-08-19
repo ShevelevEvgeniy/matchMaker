@@ -9,13 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"matchMaker/config"
-	"matchMaker/internal/console"
 	"matchMaker/internal/http_server/api/v1/handlers"
-	playerSelection "matchMaker/internal/http_server/player_selection"
+	"matchMaker/internal/http_server/events"
+	playerSelection "matchMaker/internal/http_server/handlers/player_selection"
 	"matchMaker/internal/service"
 	dbConn "matchMaker/internal/storage/postgres/db_connection"
 	"matchMaker/internal/storage/postgres/repository"
-	"matchMaker/internal/storage/redis/redis_client"
+	cacheRepository "matchMaker/internal/storage/redis/cache_repository"
+	redisConn "matchMaker/internal/storage/redis/redis_connection"
 )
 
 type DIContainer struct {
@@ -23,13 +24,14 @@ type DIContainer struct {
 	cfg                    *config.Config
 	validator              *validator.Validate
 	db                     *pgxpool.Pool
-	cache                  *redis.Client
+	redis                  *redis.Client
+	cache                  service.Cache
 	repo                   service.Repository
 	serv                   handlers.Service
 	handler                *handlers.MatchMakerHandler
-	playerSelection        playerSelection.PlayerSelectionInterface
+	playerSelection        *playerSelection.PlayerSelection
 	playerSelectionService playerSelection.Service
-	logGroups              playerSelection.LogGroups
+	formedGroupEvent       playerSelection.Events
 }
 
 func NewDiContainer(log *zap.Logger, cfg *config.Config) *DIContainer {
@@ -55,18 +57,18 @@ func (di *DIContainer) DB(ctx context.Context) *pgxpool.Pool {
 }
 
 func (di *DIContainer) Redis(ctx context.Context) *redis.Client {
-	if di.cache == nil {
-		cache, err := redis_client.Connect(ctx, di.cfg.Redis)
+	if di.redis == nil {
+		redisClient, err := redisConn.Connect(ctx, di.cfg.Redis)
 		if err != nil {
 			di.log.Fatal("failed to connect to redis", zap.Error(err))
 			os.Exit(1)
 		}
 
 		di.log.Info("connected to redis", zap.String("redis", di.cfg.Redis.Host))
-		di.cache = cache
+		di.redis = redisClient
 	}
 
-	return di.cache
+	return di.redis
 }
 
 func (di *DIContainer) Validator() *validator.Validate {
@@ -84,9 +86,17 @@ func (di *DIContainer) Repository(ctx context.Context) service.Repository {
 	return di.repo
 }
 
+func (di *DIContainer) Cache(ctx context.Context) service.Cache {
+	if di.cache == nil {
+		di.cache = cacheRepository.NewCacheRepository(di.Redis(ctx), di.cfg.Redis.Keys)
+	}
+
+	return di.cache
+}
+
 func (di *DIContainer) Service(ctx context.Context) handlers.Service {
 	if di.serv == nil {
-		di.serv = service.NewService(di.Repository(ctx), di.Redis(ctx))
+		di.serv = service.NewService(di.Repository(ctx), di.Cache(ctx))
 	}
 
 	return di.serv
@@ -103,23 +113,23 @@ func (di *DIContainer) Handler(ctx context.Context) *handlers.MatchMakerHandler 
 
 func (di *DIContainer) PlayerSelectionService(ctx context.Context) playerSelection.Service {
 	if di.playerSelectionService == nil {
-		di.playerSelectionService = service.NewService(di.Repository(ctx), di.Redis(ctx))
+		di.playerSelectionService = service.NewService(di.Repository(ctx), di.Cache(ctx))
 	}
 
 	return di.playerSelectionService
 }
 
-func (di *DIContainer) LogGroups(_ context.Context) playerSelection.LogGroups {
-	if di.logGroups == nil {
-		di.logGroups = console.NewLogGroups(di.log)
+func (di *DIContainer) FormedGroupEvent(_ context.Context) playerSelection.Events {
+	if di.formedGroupEvent == nil {
+		di.formedGroupEvent = events.NewFormedGroupEvent(di.log)
 	}
 
-	return di.logGroups
+	return di.formedGroupEvent
 }
 
-func (di *DIContainer) PlayerSelection(ctx context.Context) playerSelection.PlayerSelectionInterface {
+func (di *DIContainer) PlayerSelection(ctx context.Context) *playerSelection.PlayerSelection {
 	if di.playerSelection == nil {
-		di.playerSelection = playerSelection.NewPlayerSelection(di.cfg.MatchSettings, di.log, di.PlayerSelectionService(ctx), di.LogGroups(ctx))
+		di.playerSelection = playerSelection.NewPlayerSelection(di.cfg.MatchSettings, di.log, di.PlayerSelectionService(ctx), di.FormedGroupEvent(ctx))
 	}
 
 	return di.playerSelection
