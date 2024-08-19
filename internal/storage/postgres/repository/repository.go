@@ -20,28 +20,20 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	}
 }
 
-func (r *Repository) getConn(ctx context.Context) *pgxpool.Pool {
-	if conn, ok := ctx.Value("tx").(*pgxpool.Pool); ok {
-		return conn
-	}
-	return r.db
-}
-
 func (r *Repository) Begin(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
 	tx, err := r.db.BeginTx(ctx, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to begin transaction")
 	}
+
 	return tx, nil
 }
 
-func (r *Repository) GetUsersInSearch(ctx context.Context, batchSize int) ([]models.User, error) {
-	db := r.getConn(ctx)
-
+func (r *Repository) GetUsersInSearch(ctx context.Context, tx pgx.Tx, batchSize int) ([]models.User, error) {
 	query := queryStr.GetUsersInSearch
 
-	var users []models.User
-	rows, err := db.Query(ctx, query, batchSize)
+	users := make([]models.User, 0, batchSize)
+	rows, err := tx.Query(ctx, query, batchSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get users in search")
 	}
@@ -63,19 +55,14 @@ func (r *Repository) GetUsersInSearch(ctx context.Context, batchSize int) ([]mod
 	return users, nil
 }
 
-func (r *Repository) UnmarkSearch(ctx context.Context, usersIDs []int) error {
+func (r *Repository) UnmarkSearch(ctx context.Context, tx pgx.Tx, usersIDs []int) error {
 	if len(usersIDs) == 0 {
 		return nil
 	}
 
-	db := r.getConn(ctx)
-
 	query := queryStr.UnmarkSearch
 
-	params := make([]interface{}, 1)
-	params[0] = usersIDs
-
-	_, err := db.Exec(ctx, query, params...)
+	_, err := tx.Exec(ctx, query, usersIDs)
 	if err != nil {
 		return errors.Wrap(err, "failed to unmark search")
 	}
@@ -83,7 +70,7 @@ func (r *Repository) UnmarkSearch(ctx context.Context, usersIDs []int) error {
 	return nil
 }
 
-func (r *Repository) Users(ctx context.Context, user models.User) error {
+func (r *Repository) SaveUsers(ctx context.Context, user models.User) error {
 	query := queryStr.AddUser
 
 	_, err := r.db.Exec(ctx, query, user.Name, user.Skill, user.Latency, user.SearchMatch, user.SearchStartTime)

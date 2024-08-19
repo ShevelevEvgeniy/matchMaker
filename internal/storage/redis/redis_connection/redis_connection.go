@@ -1,4 +1,4 @@
-package redis_client
+package redis_connection
 
 import (
 	"context"
@@ -7,10 +7,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"matchMaker/config"
-)
-
-const (
-	RemainingUsersKey = "remaining_users"
 )
 
 func Connect(ctx context.Context, cfg config.Redis) (*redis.Client, error) {

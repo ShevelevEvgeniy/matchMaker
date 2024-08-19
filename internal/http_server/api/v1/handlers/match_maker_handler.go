@@ -13,7 +13,7 @@ import (
 )
 
 type Service interface {
-	Users(ctx context.Context, user DTOs.User) error
+	SaveUsers(ctx context.Context, user DTOs.User) error
 }
 
 type MatchMakerHandler struct {
@@ -30,7 +30,7 @@ func NewMatchMakerHandler(log *zap.Logger, validator *validator.Validate, servic
 	}
 }
 
-func (h *MatchMakerHandler) Users(ctx context.Context) http.HandlerFunc {
+func (h *MatchMakerHandler) SaveUsers(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.log.Info("Received HTTP POST request: " + r.RequestURI)
 
@@ -51,9 +51,7 @@ func (h *MatchMakerHandler) Users(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		h.log.Info("User Validated")
-
-		err = h.service.Users(ctx, dto)
+		err = h.service.SaveUsers(ctx, dto)
 		if err != nil {
 			h.log.Error("failed to add user", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -61,9 +59,7 @@ func (h *MatchMakerHandler) Users(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		h.log.Info("Successfully added user")
-
 		w.WriteHeader(http.StatusOK)
-		render.JSON(w, r, response.OK())
+		render.JSON(w, r, response.Created())
 	}
 }

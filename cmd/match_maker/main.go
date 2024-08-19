@@ -7,13 +7,13 @@ import (
 	"go.uber.org/zap"
 	"matchMaker/config"
 	"matchMaker/internal/app"
-	"matchMaker/lib/logger/uber_zap"
+	uberZap "matchMaker/lib/logger/uber_zap"
 )
 
 func main() {
 	ctx := context.Background()
 
-	log, stop, err := uber_zap.InitLogger()
+	log, stop, err := uberZap.InitLogger()
 	if err != nil {
 		os.Exit(1)
 	}
