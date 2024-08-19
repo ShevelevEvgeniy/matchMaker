@@ -13,7 +13,6 @@ import (
 	"matchMaker/config"
 	userConverter "matchMaker/internal/converter/user_converter"
 	"matchMaker/internal/dto"
-	"matchMaker/internal/http_server/events"
 	"matchMaker/internal/storage/postgres/repository/models"
 )
 
@@ -24,7 +23,7 @@ type Service interface {
 }
 
 type Events interface {
-	Handle(ctx context.Context, message events.Message)
+	Handle(ctx context.Context, group dto.Group)
 }
 
 type GroupFormationHandler struct {
@@ -145,7 +144,7 @@ func (g *GroupFormationHandler) createGroupsUsingNearestNeighbors(ctx context.Co
 			g.incrementGroupCounter()
 			currentGroup.GroupID = g.groupCounter
 
-			go g.events.Handle(ctx, events.Message{Value: currentGroup})
+			go g.events.Handle(ctx, currentGroup)
 		} else {
 			remainingUsers = append(remainingUsers, currentGroup.Users...)
 		}
