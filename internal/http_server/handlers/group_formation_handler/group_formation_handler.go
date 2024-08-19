@@ -2,6 +2,7 @@ package player_selection_handler
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -116,6 +117,7 @@ func (g *GroupFormationHandler) generateGroups(ctx context.Context, usersChan <-
 			}
 
 			if hasCachedUsers {
+				fmt.Println(cachedUsers)
 				users = append(cachedUsers, users...)
 			}
 
@@ -135,14 +137,14 @@ func (g *GroupFormationHandler) createGroupsUsingNearestNeighbors(ctx context.Co
 			continue
 		}
 
-		closestUsers := g.findClosestUsers(userMatrix, userIndexMap[users[i].ID], groupedUsers)
+		closestUsers := g.findClosestUsers(userMatrix, userIndexMap[users[i].ID], userIndexMap, groupedUsers)
 		currentGroup := g.formGroup(users, closestUsers, groupedUsers)
 
 		if len(currentGroup.Users) == g.cfg.GroupSize {
 			g.incrementGroupCounter()
 			currentGroup.GroupID = g.groupCounter
 
-			go g.events.Handle(ctx, currentGroup)
+			//go g.events.Handle(ctx, currentGroup)
 		} else {
 			remainingUsers = append(remainingUsers, currentGroup.Users...)
 		}
@@ -155,11 +157,17 @@ func (g *GroupFormationHandler) createGroupsUsingNearestNeighbors(ctx context.Co
 	}
 }
 
-func (g *GroupFormationHandler) findClosestUsers(userMatrix []clusters.Coordinates, index int, groupedUsers map[int64]struct{}) []dto.UserDistance {
+func (g *GroupFormationHandler) findClosestUsers(userMatrix []clusters.Coordinates, index int, userIndexMap map[int64]int, groupedUsers map[int64]struct{}) []dto.UserDistance {
 	var distances []dto.UserDistance
 
 	for j, userCoordinates := range userMatrix {
-		_, exists := groupedUsers[int64(j)]
+		if j == index {
+			continue
+		}
+
+		closestUserID := getUserIDByIndex(userIndexMap, j)
+
+		_, exists := groupedUsers[closestUserID]
 		if j == index || exists {
 			continue
 		}
@@ -200,6 +208,15 @@ func (g *GroupFormationHandler) euclideanDistance(a, b clusters.Coordinates) flo
 		sum += d * d
 	}
 	return math.Sqrt(sum)
+}
+
+func getUserIDByIndex(userIndexMap map[int64]int, index int) int64 {
+	for id, idx := range userIndexMap {
+		if idx == index {
+			return id
+		}
+	}
+	return -1
 }
 
 func (g *GroupFormationHandler) incrementGroupCounter() {

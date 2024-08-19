@@ -43,7 +43,7 @@ func UsersToMatrix(users []models.User) ([]clust.Coordinates, map[int64]int) {
 			user.Skill,
 			user.Latency,
 		}
-		dataset = append(dataset, obs)
+		dataset[i] = obs
 
 		userIndexMap[user.ID] = i
 	}
