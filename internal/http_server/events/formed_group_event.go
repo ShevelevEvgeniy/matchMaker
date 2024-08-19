@@ -70,13 +70,6 @@ func (e *FormedGroupEvent) fillingMetrics(group *dto.Group) {
 	group.MaxTimeSpentInQueue = 0
 
 	for _, user := range group.Users {
-		e.log.Info("Processing user",
-			zap.String("Name", user.Name),
-			zap.Float64("Skill", user.Skill),
-			zap.Float64("Latency", user.Latency),
-			zap.Time("SearchStartTime", user.SearchStartTime),
-		)
-
 		if user.Skill != 0 {
 			group.MinSkill = math.Min(group.MinSkill, user.Skill)
 			group.MaxSkill = math.Max(group.MaxSkill, user.Skill)
