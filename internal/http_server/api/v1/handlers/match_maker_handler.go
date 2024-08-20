@@ -47,7 +47,7 @@ func (h *MatchMakerHandler) SaveUsers(ctx context.Context) http.HandlerFunc {
 		if err != nil {
 			h.log.Error("failed to validate user", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
-			render.JSON(w, r, response.BadRequest(err.Error()))
+			render.JSON(w, r, response.BadRequest("failed to validate user"))
 			return
 		}
 
