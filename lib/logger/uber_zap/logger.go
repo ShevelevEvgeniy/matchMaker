@@ -21,7 +21,7 @@ func InitLogger() (logger *zap.Logger, stop func(), err error) {
 		log, stop := InitProdLogger()
 		return log, stop, nil
 	default:
-		logger, err := zap.NewProduction()
+		logger, err = zap.NewProduction()
 		if err != nil {
 			panic(err)
 		}
