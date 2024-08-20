@@ -1,4 +1,4 @@
-package player_selection_handler
+package group_formation_handler
 
 import (
 	"context"
